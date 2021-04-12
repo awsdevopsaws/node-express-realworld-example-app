@@ -1,0 +1,110 @@
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    name: mongo
+  name: mongo
+spec:
+  ports:
+  - port: 27017
+    protocol: TCP
+    name: mongo
+    targetPort: 27017
+  selector:
+    name: mongo
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mongo
+spec:
+  selector:
+    matchLabels:
+      name: mongo
+  serviceName: "mongo"
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        name: mongo
+    spec:
+      terminationGracePeriodSeconds: 10
+      containers:
+        - name: mongo
+          image: mongo
+          command:
+            - mongod
+            - "--bind_ip_all"
+            - "--replSet"
+            - rs0
+          ports:
+            - containerPort: 27017
+          volumeMounts:
+            - name: mymongoclaim
+              mountPath: /data/db
+  volumeClaimTemplates:
+  - metadata:
+      name: mymongoclaim
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: expressapp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      name: expressapp
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        name: expressapp
+    spec:
+      containers:
+      - env:
+        - name: SECRET
+          valueFrom:
+            secretKeyRef:
+              name: secretjwt
+              key: secret
+        - name: MONGODB_URI
+          valueFrom:
+            secretKeyRef:
+              name: mongouri
+              key: uri
+        - name: NODE_ENV
+          value: production
+        image: awsdevopsaws/nodeexpresstarik:latest
+        name: expressapp
+        ports:
+        - containerPort: 3000
+          protocol: TCP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    name: expressapp
+  name: routinexpressappg
+spec:
+  ports:
+  - name: node
+    port: 80
+    protocol: TCP
+    targetPort: 3000
+  selector:
+    name: expressapp
+  type: ClusterIP
+---
+
